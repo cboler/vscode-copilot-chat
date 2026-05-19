@@ -867,6 +867,19 @@ export namespace ConfigKey {
 		export const AzureAuthType = defineSetting<AzureAuthMode>('chat.azureAuthType', ConfigType.Simple, AzureAuthMode.EntraId);
 	}
 
+	/**
+	 * Enterprise on-premises / BYOK settings.
+	 * When `CustomEndpointUrl` is populated, the extension will instantiate a
+	 * GenericOpenAIAdapter targeting that URL instead of using the default
+	 * GitHub Copilot inference pipeline.
+	 */
+	export namespace Enterprise {
+		/** The base URL of the OpenAI-compatible inference endpoint (e.g. https://my-company.example.com/v1) */
+		export const CustomEndpointUrl = defineSetting<string>('chat.enterprise.customEndpointUrl', ConfigType.Simple, '');
+		/** The API key used to authenticate with the enterprise endpoint */
+		export const ApiKey = defineSetting<string>('chat.enterprise.apiKey', ConfigType.Simple, '');
+	}
+
 	export const Enable = defineSetting<{ [key: string]: boolean }>('enable', ConfigType.Simple, {
 		'*': true,
 		'plaintext': false,
