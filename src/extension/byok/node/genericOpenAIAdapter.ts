@@ -3,8 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as https from 'https';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { EnterpriseNetworkAgent } from '../../../platform/networking/node/enterpriseNetworkAgent';
 import { ChatCompletionResult, ChatMessage, ChatRequestOptions, IInferenceAdapter } from '../common/inferenceAdapter';
 
 /**
@@ -39,13 +41,19 @@ interface OpenAIChatCompletionResponse {
  * customers bring their own API key and point to a generic OpenAI-compatible
  * inference server (e.g. Azure OpenAI, vLLM, LocalAI, LiteLLM, etc.).
  *
+ * When an `EnterpriseNetworkAgent` is provided, the adapter will use its
+ * configured `https.Agent` for outbound requests, enabling mTLS
+ * authentication with secure enterprise API gateways.
+ *
  * Usage:
  * ```ts
+ * const networkAgent = new EnterpriseNetworkAgent(certPath, logService);
  * const adapter = new GenericOpenAIAdapter(
  *     'https://my-company.openai.azure.com/v1',
  *     'sk-...',
  *     fetcherService,
- *     logService
+ *     logService,
+ *     networkAgent
  * );
  * const result = await adapter.sendChatRequest([
  *     { role: 'user', content: 'Hello!' }
@@ -59,16 +67,24 @@ export class GenericOpenAIAdapter implements IInferenceAdapter {
 	private static readonly REQUEST_TIMEOUT_MS = 60_000;
 
 	private readonly _endpointUrl: string;
+	private readonly _httpsAgent: https.Agent | undefined;
 
 	constructor(
 		endpointUrl: string,
 		private readonly _apiKey: string,
 		private readonly _fetcherService: IFetcherService,
 		private readonly _logService: ILogService,
+		enterpriseNetworkAgent?: EnterpriseNetworkAgent,
 	) {
 		// Normalize the endpoint URL: ensure it ends with /chat/completions
 		this._endpointUrl = GenericOpenAIAdapter._resolveCompletionsUrl(endpointUrl);
 		this._logService.info(`[GenericOpenAIAdapter] Initialized with endpoint: ${this._endpointUrl}`);
+
+		// Obtain the mTLS-configured https.Agent if an enterprise network agent is provided
+		if (enterpriseNetworkAgent) {
+			this._httpsAgent = enterpriseNetworkAgent.getHttpsAgent();
+			this._logService.info('[GenericOpenAIAdapter] Using enterprise mTLS HTTPS agent for outbound requests.');
+		}
 	}
 
 	/**
@@ -130,6 +146,15 @@ export class GenericOpenAIAdapter implements IInferenceAdapter {
 			this._logService.error(error, '[GenericOpenAIAdapter] Chat request failed');
 			throw error;
 		}
+	}
+
+	/**
+	 * Returns the enterprise `https.Agent` if one was configured, or `undefined`.
+	 * External callers that need to make direct HTTPS requests through the same
+	 * mTLS configuration can use this accessor.
+	 */
+	public getHttpsAgent(): https.Agent | undefined {
+		return this._httpsAgent;
 	}
 
 	/**

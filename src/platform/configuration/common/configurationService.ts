@@ -878,6 +878,8 @@ export namespace ConfigKey {
 		export const CustomEndpointUrl = defineSetting<string>('chat.enterprise.customEndpointUrl', ConfigType.Simple, '');
 		/** The API key used to authenticate with the enterprise endpoint */
 		export const ApiKey = defineSetting<string>('chat.enterprise.apiKey', ConfigType.Simple, '');
+		/** Absolute path to a .pem or .p7b certificate file for mTLS authentication with the enterprise API gateway */
+		export const CertificatePath = defineSetting<string>('chat.enterprise.certificatePath', ConfigType.Simple, '');
 	}
 
 	export const Enable = defineSetting<{ [key: string]: boolean }>('enable', ConfigType.Simple, {
