@@ -15,6 +15,7 @@ import { BYOKKnownModels, isBYOKEnabled } from '../../byok/common/byokProvider';
 import { IInferenceAdapter } from '../../byok/common/inferenceAdapter';
 import { IExtensionContribution } from '../../common/contributions';
 import { GenericOpenAIAdapter } from '../node/genericOpenAIAdapter';
+import { EnterpriseNetworkAgent } from '../../../platform/networking/node/enterpriseNetworkAgent';
 import { AnthropicLMProvider } from './anthropicProvider';
 import { AzureBYOKModelProvider } from './azureProvider';
 import { BYOKStorageService, IBYOKStorageService } from './byokStorageService';
@@ -101,14 +102,20 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 	private _initEnterpriseAdapter(): void {
 		const customEndpointUrl = this._configurationService.getConfig(ConfigKey.Enterprise.CustomEndpointUrl);
 		const apiKey = this._configurationService.getConfig(ConfigKey.Enterprise.ApiKey);
+		const certificatePath = this._configurationService.getConfig(ConfigKey.Enterprise.CertificatePath);
 
 		if (customEndpointUrl) {
 			this._logService.info(`[BYOKContrib] Enterprise custom endpoint configured: ${customEndpointUrl}`);
+
+			// Create the mTLS network agent if a certificate path is configured
+			const networkAgent = new EnterpriseNetworkAgent(certificatePath, this._logService);
+
 			this._enterpriseAdapter = new GenericOpenAIAdapter(
 				customEndpointUrl,
 				apiKey,
 				this._fetcherService,
 				this._logService,
+				networkAgent,
 			);
 		} else {
 			this._enterpriseAdapter = undefined;
