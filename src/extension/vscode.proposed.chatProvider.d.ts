@@ -142,6 +142,17 @@ declare module 'vscode' {
 		provideLanguageModelChatResponse(model: T, messages: readonly LanguageModelChatRequestMessage[], options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Thenable<void>;
 	}
 
+	export namespace lm {
+		/**
+		 * Registers a {@linkcode LanguageModelChatProvider}
+		 * Note: You must also define the language model chat provider via the `languageModelChatProviders` contribution point in package.json
+		 * @param vendor The vendor for this provider. Must be globally unique. An example is `copilot` or `openai`.
+		 * @param provider The provider to register
+		 * @returns A disposable that unregisters the provider when disposed
+		 */
+		export function registerLanguageModelChatProvider(vendor: string, provider: LanguageModelChatProvider): Disposable;
+	}
+
 	/**
 	 * The list of options passed into {@linkcode LanguageModelChatProvider.provideLanguageModelChatInformation}
 	 */

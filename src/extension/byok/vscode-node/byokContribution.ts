@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { LanguageModelChatInformation, LanguageModelChatProvider, lm } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -11,7 +12,9 @@ import { IFetcherService } from '../../../platform/networking/common/fetcherServ
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { BYOKKnownModels, isBYOKEnabled } from '../../byok/common/byokProvider';
+import { IInferenceAdapter } from '../../byok/common/inferenceAdapter';
 import { IExtensionContribution } from '../../common/contributions';
+import { GenericOpenAIAdapter } from '../node/genericOpenAIAdapter';
 import { AnthropicLMProvider } from './anthropicProvider';
 import { AzureBYOKModelProvider } from './azureProvider';
 import { BYOKStorageService, IBYOKStorageService } from './byokStorageService';
@@ -28,6 +31,24 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 	private readonly _providers: Map<string, LanguageModelChatProvider<LanguageModelChatInformation>> = new Map();
 	private _byokProvidersRegistered = false;
 
+	/**
+	 * Holds the enterprise adapter instance when `enterprise.customEndpointUrl` is configured.
+	 * Access via the static `getEnterpriseAdapter()` method.
+	 */
+	private _enterpriseAdapter: IInferenceAdapter | undefined;
+	private static _instance: BYOKContrib | undefined;
+
+	/**
+	 * Returns the enterprise GenericOpenAIAdapter if the `enterprise.customEndpointUrl`
+	 * configuration value is populated, otherwise returns `undefined`.
+	 *
+	 * This allows internal callers to conditionally route requests through
+	 * the enterprise adapter instead of the default Copilot inference pipeline.
+	 */
+	public static getEnterpriseAdapter(): IInferenceAdapter | undefined {
+		return BYOKContrib._instance?._enterpriseAdapter;
+	}
+
 	constructor(
 		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@ILogService private readonly _logService: ILogService,
@@ -35,8 +56,10 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		@IVSCodeExtensionContext extensionContext: IVSCodeExtensionContext,
 		@IAuthenticationService authService: IAuthenticationService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super();
+		BYOKContrib._instance = this;
 		this._byokStorageService = new BYOKStorageService(extensionContext);
 		this._authChange(authService, this._instantiationService);
 
@@ -66,7 +89,32 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 				this._store.add(lm.registerLanguageModelChatProvider(providerName, provider));
 			}
 		}
+
+		// Enterprise adapter: if `enterprise.customEndpointUrl` is configured,
+		// instantiate a GenericOpenAIAdapter for the enterprise on-premises endpoint.
+		this._initEnterpriseAdapter();
 	}
+	/**
+	 * Checks if the `enterprise.customEndpointUrl` configuration is populated
+	 * and, if so, creates a GenericOpenAIAdapter instance targeting that endpoint.
+	 */
+	private _initEnterpriseAdapter(): void {
+		const customEndpointUrl = this._configurationService.getConfig(ConfigKey.Enterprise.CustomEndpointUrl);
+		const apiKey = this._configurationService.getConfig(ConfigKey.Enterprise.ApiKey);
+
+		if (customEndpointUrl) {
+			this._logService.info(`[BYOKContrib] Enterprise custom endpoint configured: ${customEndpointUrl}`);
+			this._enterpriseAdapter = new GenericOpenAIAdapter(
+				customEndpointUrl,
+				apiKey,
+				this._fetcherService,
+				this._logService,
+			);
+		} else {
+			this._enterpriseAdapter = undefined;
+		}
+	}
+
 	private async fetchKnownModelList(fetcherService: IFetcherService): Promise<Record<string, BYOKKnownModels>> {
 		const data = await (await fetcherService.fetch('https://main.vscode-cdn.net/extensions/copilotChat.json', { method: 'GET', callSite: 'byok-known-models' })).json();
 		// Use this for testing with changes from a local file. Don't check in
